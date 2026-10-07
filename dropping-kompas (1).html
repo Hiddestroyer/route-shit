@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, maximum-scale=1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Richting</title>
+<style>
+  :root{
+    --bg:#15231d; --bg2:#0e1813; --fg:#eef3ee; --dim:#9fb3a7;
+    --accent:#e7b24a; --danger:#c24b3f; --ring:#223a30;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; margin:0;}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    overflow:hidden; -webkit-user-select:none; user-select:none; touch-action:manipulation;
+    overscroll-behavior:none;
+  }
+  .screen{
+    display:none; position:fixed; left:0; right:0; top:0;
+    bottom:calc(76px + env(safe-area-inset-bottom,0px));
+    padding:calc(env(safe-area-inset-top,0px) + 56px) 24px 12px;
+    flex-direction:column; align-items:center; justify-content:center; gap:18px; text-align:center;
+  }
+  .screen.on{display:flex;}
+  h1{font-size:19px; font-weight:600; color:var(--dim); margin:0;}
+  p.note{color:var(--dim); font-size:14px; line-height:1.5; max-width:320px; margin:0;}
+  .btn{
+    background:var(--accent); color:#1b1300; border:none; border-radius:14px;
+    padding:16px 28px; font-size:17px; font-weight:700; cursor:pointer; width:100%; max-width:320px;
+  }
+  .btn:active{transform:scale(.98);}
+  .big{font-size:56px;}
+  .diskwrap{position:relative; width:min(72vw,280px); height:min(72vw,280px);}
+  .disk{
+    width:100%; height:100%; border-radius:50%;
+    background:radial-gradient(circle at 50% 40%, var(--bg2), #0a120e 85%);
+    border:2px solid var(--ring); display:flex; align-items:center; justify-content:center;
+  }
+  #arrow{width:62%; height:62%; transition:transform .2s linear; filter:drop-shadow(0 0 10px rgba(231,178,74,.35));}
+  .distance{font-size:40px; font-weight:700; letter-spacing:-.5px; min-height:48px;}
+  .distance small{font-size:16px; font-weight:500; color:var(--dim);}
+  .progress{color:var(--dim); font-size:14px; min-height:18px;}
+  .warn{color:#e7b24a; font-size:13px; min-height:18px;}
+  .toast{
+    position:fixed; top:calc(env(safe-area-inset-top,0px) + 56px); left:50%; transform:translateX(-50%);
+    background:var(--accent); color:#1b1300; padding:10px 18px; border-radius:10px; font-weight:700;
+    font-size:14px; opacity:0; transition:opacity .4s; pointer-events:none; z-index:30; white-space:nowrap;
+  }
+  .toast.show{opacity:1;}
+  #codeBtn{
+    position:fixed; top:calc(env(safe-area-inset-top,0px) + 12px); right:12px; z-index:20;
+    background:none; border:1px solid var(--ring); color:var(--dim); border-radius:10px;
+    padding:8px 12px; font-size:13px; cursor:pointer;
+  }
+  .calls{
+    position:fixed; left:0; right:0; bottom:0; z-index:20;
+    padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));
+    background:#0e1813; border-top:1px solid var(--ring);
+    display:flex; justify-content:center; gap:10px;
+  }
+  .calls a{
+    flex:1; max-width:220px; text-align:center; color:var(--fg); font-weight:700; font-size:14px; text-decoration:none;
+    border:1px solid var(--danger); border-radius:12px; padding:13px 10px;
+  }
+  #codeModal{
+    display:none; position:fixed; inset:0; z-index:40; background:rgba(8,14,11,.96);
+    flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:24px;
+  }
+  #codeModal.on{display:flex;}
+  #codeInput{
+    width:100%; max-width:280px; background:#1d2f27; border:1px solid var(--ring); color:var(--fg);
+    border-radius:10px; padding:14px; font-size:20px; text-align:center; -webkit-user-select:text; user-select:text;
+  }
+  #codeMsg{min-height:20px; font-size:14px; color:#ff8a7d;}
+  .btn.ghost{background:none; border:1px solid var(--ring); color:var(--dim);}
+</style>
+</head>
+<body>
+
+<button id="codeBtn" type="button">&#128274; code</button>
+
+<div id="startScreen" class="screen">
+  <h1>Klaar om te beginnen</h1>
+  <div class="big">&#129517;</div>
+  <p class="note">Geen kaart, alleen een pijl. Volg de pijl en loop ernaartoe. Bij elk punt schakelt hij vanzelf door naar het volgende.</p>
+  <p class="note">Let op: zodra je op Start drukt, zit de app op slot tot de route af is of je de code invoert.</p>
+  <button class="btn" id="startBtn" type="button">Start</button>
+  <p class="note">De telefoon vraagt zo om toegang tot locatie en kompas. Zet die aan, anders werkt de pijl niet.</p>
+</div>
+
+<div id="resumeScreen" class="screen">
+  <h1>Route bezig</h1>
+  <div class="big">&#129517;</div>
+  <p class="note">Tik op verder om de pijl weer te laten werken.</p>
+  <button class="btn" id="resumeBtn" type="button">Verder</button>
+</div>
+
+<div id="errorScreen" class="screen">
+  <h1>Toegang nodig</h1>
+  <p class="note" id="errorText">Locatie en/of kompas zijn niet beschikbaar.</p>
+  <button class="btn" id="retryBtn" type="button">Opnieuw proberen</button>
+</div>
+
+<div id="mainScreen" class="screen">
+  <div class="progress" id="progress"></div>
+  <div class="diskwrap">
+    <div class="disk">
+      <svg id="arrow" viewBox="0 0 100 100" aria-hidden="true">
+        <polygon points="50,6 84,62 58,56 58,92 42,92 42,56 16,62" fill="#e7b24a"/>
+      </svg>
+    </div>
+  </div>
+  <div class="distance" id="distance">&ndash;</div>
+  <div class="warn" id="warn"></div>
+  <p class="note">Draai rond tot de pijl omhoog wijst, en loop dan die kant op.</p>
+</div>
+
+<div id="doneScreen" class="screen">
+  <div class="big" id="doneIcon">&#127881;</div>
+  <h1 id="doneText">Je bent er!</h1>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="calls" id="calls"></div>
+
+<div id="codeModal">
+  <h1>Unlock-code</h1>
+  <input id="codeInput" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+  <div id="codeMsg"></div>
+  <button class="btn" id="codeOk" type="button">Ontgrendel</button>
+  <button class="btn ghost" id="codeCancel" type="button">Terug</button>
+</div>
+
+<script>
+(function(){
+var CFG = {"waypoints":[{"lat":52.06745,"lon":5.10962,"radius":20},{"lat":52.067312,"lon":5.113513,"radius":20},{"lat":52.065501,"lon":5.127544,"radius":20},{"lat":52.065148,"lon":5.139974,"radius":20},{"lat":52.065773,"lon":5.139529,"radius":20},{"lat":52.066204,"lon":5.140788,"radius":20}],"finalMessage":"Je bent aangekomen!","showDistance":true,"showProgress":true,"salt":"1hmtrbnl","codeHash":"7443236249695315","contacts":[{"name":"Kirsta","number":"+31639385175"}],"routeId":"1hmtrbnl"};
+var WP = CFG.waypoints;
+var KEY = "dropping-state-" + CFG.routeId;
+var state = { idx: 0, started: false, done: false, unlocked: false, fails: 0, lockUntil: 0 };
+
+function cyrb53(str, seed){
+  seed = seed || 0;
+  var h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (var i = 0, ch; i < str.length; i++){
+    ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return String(4294967296 * (2097151 & h2) + (h1 >>> 0));
+}
+
+try {
+  var saved = JSON.parse(localStorage.getItem(KEY) || "null");
+  if (saved && typeof saved === "object"){
+    for (var k in state){ if (saved.hasOwnProperty(k)) state[k] = saved[k]; }
+  }
+} catch (e) {}
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+function $(id){ return document.getElementById(id); }
+function toRad(d){ return d * Math.PI / 180; }
+function toDeg(r){ return r * 180 / Math.PI; }
+
+function distanceMeters(a, b){
+  var R = 6371000;
+  var dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
+  var la1 = toRad(a.lat), la2 = toRad(b.lat);
+  var h = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)*Math.sin(dLon/2);
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function bearingDeg(a, b){
+  var la1 = toRad(a.lat), la2 = toRad(b.lat), dLon = toRad(b.lon - a.lon);
+  var y = Math.sin(dLon) * Math.cos(la2);
+  var x = Math.cos(la1)*Math.sin(la2) - Math.sin(la1)*Math.cos(la2)*Math.cos(dLon);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+function showToast(msg){
+  var t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(function(){ t.classList.remove("show"); }, 2200);
+}
+function vibrate(p){ try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
+
+var SCREENS = ["startScreen", "resumeScreen", "errorScreen", "mainScreen", "doneScreen"];
+function setScreen(name){
+  for (var i = 0; i < SCREENS.length; i++){
+    $(SCREENS[i]).classList.toggle("on", SCREENS[i] === name);
+  }
+  $("codeBtn").style.display = (name === "doneScreen" || name === "startScreen") ? "none" : "block";
+}
+
+/* ---- bel-knoppen: alleen de vaste nummers uit de configuratie ---- */
+(function(){
+  var box = $("calls");
+  for (var i = 0; i < CFG.contacts.length && i < 2; i++){
+    var a = document.createElement("a");
+    a.href = "tel:" + CFG.contacts[i].number;
+    a.textContent = "Bel " + CFG.contacts[i].name;
+    box.appendChild(a);
+  }
+  if (!CFG.contacts.length) box.style.display = "none";
+})();
+
+/* ---- einde van de route of unlock ---- */
+function finish(viaCode){
+  state.done = true;
+  if (viaCode) state.unlocked = true;
+  save();
+  stopTracking();
+  $("doneIcon").textContent = viaCode ? "🔓" : "🎉";
+  $("doneText").textContent = viaCode ? "Ontgrendeld" : CFG.finalMessage;
+  setScreen("doneScreen");
+  vibrate(viaCode ? 100 : [80, 60, 80, 60, 200]);
+}
+
+/* ---- tracking ---- */
+var lastPos = null, lastAcc = null;
+var smooth = null, rawHeading = null;
+var ang = 0;
+var watchId = null, gotAbs = false, listening = false, wakeLock = null;
+
+function stopTracking(){
+  try { if (watchId !== null) navigator.geolocation.clearWatch(watchId); } catch (e) {}
+  watchId = null;
+  try {
+    window.removeEventListener("deviceorientationabsolute", onAbs, true);
+    window.removeEventListener("deviceorientation", onRel, true);
+  } catch (e) {}
+  listening = false;
+  try { if (wakeLock) wakeLock.release(); } catch (e) {}
+  wakeLock = null;
+}
+
+function update(){
+  if (state.done) return;
+  if (state.idx >= WP.length){ finish(false); return; }
+  if (!lastPos) return;
+  var target = WP[state.idx];
+  var d = distanceMeters(lastPos, target);
+
+  if (CFG.showProgress) $("progress").textContent = "punt " + (state.idx + 1) + " van " + WP.length;
+  if (CFG.showDistance){
+    var unit = d < 1000 ? "m" : "km";
+    var val = d < 1000 ? Math.round(d) : (d / 1000).toFixed(1);
+    $("distance").innerHTML = val + " <small>" + unit + "</small>";
+  } else {
+    $("distance").textContent = d < target.radius * 3 ? "dichtbij" : "";
+  }
+  $("warn").textContent = (lastAcc !== null && lastAcc > 40) ? "GPS-signaal is zwak, ga naar buiten of wacht even" : "";
+
+  if (smooth !== null){
+    var rel = bearingDeg(lastPos, target) - smooth;
+    var delta = (((rel - ang) % 360) + 540) % 360 - 180;
+    ang += delta;
+    $("arrow").style.transform = "rotate(" + ang + "deg)";
+  }
+
+  if (d <= target.radius){
+    state.idx++;
+    save();
+    vibrate(200);
+    if (state.idx >= WP.length){ finish(false); }
+    else { showToast("Punt bereikt, op naar het volgende"); update(); }
+  }
+}
+
+function onPosition(pos){
+  lastPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+  lastAcc = pos.coords.accuracy;
+  update();
+}
+function onPositionError(){
+  showError("Kan de locatie niet bepalen. Controleer of locatietoegang aan staat.");
+}
+
+function tiltHeading(alpha, beta, gamma){
+  var d = Math.PI / 180, a = alpha * d, b = beta * d, g = gamma * d;
+  var cA = Math.cos(a), sA = Math.sin(a), sB = Math.sin(b), cG = Math.cos(g), sG = Math.sin(g);
+  var rA = -cA * sG - sA * sB * cG;
+  var rB = -sA * sG + cA * sB * cG;
+  var h = Math.atan(rA / rB);
+  if (rB < 0) h += Math.PI; else if (rA < 0) h += 2 * Math.PI;
+  return (h / d + 360) % 360;
+}
+function pushHeading(h){
+  if (h === null || isNaN(h)) return;
+  rawHeading = h;
+  if (smooth === null){ smooth = h; }
+  else {
+    var diff = (((h - smooth) % 360) + 540) % 360 - 180;
+    smooth = (smooth + diff * 0.25 + 360) % 360;
+  }
+  update();
+}
+function headingFromEvent(e){
+  if (typeof e.webkitCompassHeading === "number") return e.webkitCompassHeading;
+  if (e.alpha === null || e.alpha === undefined) return null;
+  if (e.beta !== null && e.gamma !== null && e.beta > 50 && e.beta < 130){
+    return tiltHeading(e.alpha, e.beta, e.gamma);
+  }
+  return (360 - e.alpha) % 360;
+}
+function onAbs(e){ gotAbs = true; pushHeading(headingFromEvent(e)); }
+function onRel(e){
+  if (gotAbs && typeof e.webkitCompassHeading !== "number") return;
+  pushHeading(headingFromEvent(e));
+}
+
+function showError(msg){
+  $("errorText").textContent = msg;
+  if (!state.done) setScreen("errorScreen");
+}
+
+async function requestWake(){
+  try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
+}
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState === "visible" && state.started && !state.done) requestWake();
+});
+
+async function begin(){
+  try {
+    if (!("geolocation" in navigator)) throw new Error("geo");
+    if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function"){
+      var res = await DeviceOrientationEvent.requestPermission();
+      if (res !== "granted") throw new Error("orientation");
+    }
+    if (!state.started){ state.started = true; save(); }
+    stopTracking();
+    window.addEventListener("deviceorientationabsolute", onAbs, true);
+    window.addEventListener("deviceorientation", onRel, true);
+    listening = true;
+    watchId = navigator.geolocation.watchPosition(onPosition, onPositionError, {
+      enableHighAccuracy: true, maximumAge: 1000, timeout: 20000
+    });
+    requestWake();
+    setScreen("mainScreen");
+  } catch (e) {
+    if (state.started) showError("Toegang tot kompas of locatie geweigerd. Zet dit aan in de instellingen en probeer opnieuw.");
+    else { setScreen("startScreen"); showToast("Geef toegang tot locatie en kompas om te starten"); }
+  }
+}
+
+$("startBtn").addEventListener("click", begin);
+$("resumeBtn").addEventListener("click", begin);
+$("retryBtn").addEventListener("click", begin);
+
+/* ---- unlock-code ---- */
+function openCode(){
+  $("codeInput").value = "";
+  $("codeMsg").textContent = "";
+  $("codeModal").classList.add("on");
+  setTimeout(function(){ $("codeInput").focus(); }, 50);
+}
+function closeCode(){ $("codeModal").classList.remove("on"); $("codeInput").blur(); }
+function tryCode(){
+  var now = Date.now();
+  if (state.lockUntil > now){
+    $("codeMsg").textContent = "Wacht nog " + Math.ceil((state.lockUntil - now) / 1000) + " seconden";
+    return;
+  }
+  var entered = $("codeInput").value.trim().toLowerCase();
+  if (cyrb53(CFG.salt + entered) === CFG.codeHash){
+    closeCode();
+    finish(true);
+    return;
+  }
+  state.fails++;
+  if (state.fails >= 3){ state.fails = 0; state.lockUntil = now + 30000; $("codeMsg").textContent = "Te veel pogingen, wacht 30 seconden"; }
+  else { $("codeMsg").textContent = "Onjuiste code"; }
+  save();
+  $("codeInput").value = "";
+}
+$("codeBtn").addEventListener("click", openCode);
+$("codeCancel").addEventListener("click", closeCode);
+$("codeOk").addEventListener("click", tryCode);
+$("codeInput").addEventListener("keydown", function(e){ if (e.key === "Enter") tryCode(); });
+
+/* ---- slot: geen terug-knop, geen menu, geen zoom ---- */
+try {
+  history.pushState(null, "", location.href);
+  window.addEventListener("popstate", function(){ history.pushState(null, "", location.href); });
+} catch (e) {}
+document.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+document.addEventListener("gesturestart", function(e){ e.preventDefault(); });
+document.addEventListener("dblclick", function(e){ e.preventDefault(); });
+
+/* ---- opstarten ---- */
+if (state.done || state.idx >= WP.length){
+  finish(state.unlocked);
+} else if (state.started){
+  setScreen("resumeScreen");
+} else {
+  setScreen("startScreen");
+}
+})();
+</script>
+</body>
+</html>
